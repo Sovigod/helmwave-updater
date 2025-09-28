@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -13,6 +14,13 @@ import (
 )
 
 func main() {
+	// allow filename via flag or positional argument
+	var filename string
+	var inplace bool
+	flag.StringVar(&filename, "file", "helmwave.yml.tpl", "path to helmwave yaml file")
+	flag.BoolVar(&inplace, "inplace", false, "modify the original file instead of creating a .updated copy")
+	flag.Parse()
+
 	settings := cli.New()
 
 	var indexes = make(map[string]*repo.IndexFile)
@@ -29,7 +37,6 @@ func main() {
 		}
 	}
 
-	filename := "helmwave.yml.tpl"
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
@@ -182,6 +189,9 @@ func main() {
 	}
 
 	outFile := filename + ".updated"
+	if inplace {
+		outFile = filename
+	}
 	out := strings.Join(lines, "\n")
 	if err := os.WriteFile(outFile, []byte(out), 0644); err != nil {
 		log.Fatalf("failed to write %s: %v", outFile, err)

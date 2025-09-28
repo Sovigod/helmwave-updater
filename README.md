@@ -9,11 +9,23 @@ A small utility to find the latest Helm chart versions from repository indexes a
 - Supports the `noupdate` tag on releases to skip updating specific releases.
 - CLI: flags `-file`, `-inplace`, `-verbose`.
 
-## Where to get pre-built binaries
+## Quick install (one-liners)
 
-Pre-built release artifacts are available on the releases page:
+Install the latest release binary directly to /usr/local/bin using curl.
 
-[Release v0.0.2](https://github.com/Sovigod/helmwave-updater/releases/tag/v0.0.2)
+macOS (Apple Silicon / M-series, darwin/arm64):
+
+```bash
+sudo curl -sSL "https://github.com/Sovigod/helmwave-updater/releases/latest/download/helmwave-updater-darwin-arm64" -o /usr/local/bin/helmwave-updater && sudo chmod +x /usr/local/bin/helmwave-updater
+```
+
+Linux (x86_64 / linux/amd64):
+
+```bash
+sudo curl -sSL "https://github.com/Sovigod/helmwave-updater/releases/latest/download/helmwave-updater-linux-amd64" -o /usr/local/bin/helmwave-updater && sudo chmod +x /usr/local/bin/helmwave-updater
+```
+
+Note: these commands download the binary for the platform indicated and install it to `/usr/local/bin`. Adjust the URL or destination path if you need a different platform or install location.
 
 ## Building from source
 
@@ -55,32 +67,8 @@ To overwrite the original file in-place:
 bin/helmwave-updater -file helmwave.yml.tpl -inplace
 ```
 
-## CI / Releases
-
-This repository contains a GitHub Actions workflow (`.github/workflows/release.yml`) that builds minimal binaries for multiple platforms and creates a GitHub Release when a tag matching `v*` is pushed.
-
-If you encounter permission errors (HTTP 403) when the workflow tries to create a release, check your repository/organization Actions settings and the permissions for the GITHUB_TOKEN, or consider providing a Personal Access Token via the `RELEASE_PAT` secret.
-
 ## Contact
 
 Author: Sovigod
 
 License: MIT (unless otherwise specified in the repository)
-
-## Quick install (one-liners)
-
-Install the latest release binary directly to /usr/local/bin using curl.
-
-macOS (Apple Silicon / M-series, darwin/arm64):
-
-```bash
-sudo curl -sSL "https://github.com/Sovigod/helmwave-updater/releases/latest/download/helmwave-updater-darwin-arm64" -o /usr/local/bin/helmwave-updater && sudo chmod +x /usr/local/bin/helmwave-updater
-```
-
-Linux (x86_64 / linux/amd64):
-
-```bash
-sudo curl -sSL "https://github.com/Sovigod/helmwave-updater/releases/latest/download/helmwave-updater-linux-amd64" -o /usr/local/bin/helmwave-updater && sudo chmod +x /usr/local/bin/helmwave-updater
-```
-
-Note: these commands download the binary for the platform indicated and install it to `/usr/local/bin`. Adjust the URL or destination path if you need a different platform or install location.

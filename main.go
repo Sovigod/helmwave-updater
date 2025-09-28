@@ -198,7 +198,8 @@ func updateFileText(original []byte, versionMap map[string]string) string {
 						vlog("existing version for release %s equals target %s; skipping file edit", relName, newVer)
 						inChart = false
 						inRelease = false
-						break
+						// continue scanning for other occurrences of the same release later in the file
+						continue
 					}
 					useQuotes := strings.Contains(after, "\"") || strings.Contains(after, "'")
 					var valStr string
@@ -212,7 +213,8 @@ func updateFileText(original []byte, versionMap map[string]string) string {
 					lines[i] = newLine
 					inChart = false
 					inRelease = false
-					break
+					// continue scanning to update possible additional occurrences of the same release
+					continue
 				}
 			}
 		}

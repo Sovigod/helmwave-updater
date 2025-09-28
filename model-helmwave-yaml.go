@@ -5,35 +5,9 @@ package main
 
 // Helmwave представляет корневой объект файла.
 type Helmwave struct {
-	Registries   []Registry   `yaml:"registries,omitempty"`
-	Repositories []Repository `yaml:"repositories,omitempty"`
-	Releases     []Release    `yaml:"releases,omitempty"`
+	Releases []Release `yaml:"releases,omitempty"`
 }
 
-// Registry представляет запись в списке registries.
-type Registry struct {
-	Host string `yaml:"host"`
-}
-
-// Repository представляет запись в списке repositories.
-type Repository struct {
-	Name string `yaml:"name"`
-	URL  string `yaml:"url"`
-}
-
-// Options содержит общие опции, которые в шаблоне задаются через якорь &options
-type Options struct {
-	Force                  bool   `yaml:"force,omitempty"`
-	Atomic                 bool   `yaml:"atomic,omitempty"`
-	MaxHistory             int    `yaml:"max_history,omitempty"`
-	CreateNamespace        bool   `yaml:"create_namespace,omitempty"`
-	ResetValues            bool   `yaml:"reset_values,omitempty"`
-	PendingReleaseStrategy string `yaml:"pending_release_strategy,omitempty"`
-	Context                string `yaml:"context,omitempty"`
-}
-
-// Release описывает один релиз в списке releases.
-// Встраиваем Options с тегом inline, чтобы поддерживать оператор слияния YAML (<<: *options)
 type Release struct {
 	Name      string        `yaml:"name"`
 	Chart     Chart         `yaml:"chart"`

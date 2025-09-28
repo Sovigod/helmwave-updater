@@ -7,7 +7,6 @@ package main
 type Helmwave struct {
 	Registries   []Registry   `yaml:"registries,omitempty"`
 	Repositories []Repository `yaml:"repositories,omitempty"`
-	Options      *Options     `yaml:".options,omitempty"`
 	Releases     []Release    `yaml:"releases,omitempty"`
 }
 
@@ -36,17 +35,20 @@ type Options struct {
 // Release описывает один релиз в списке releases.
 // Встраиваем Options с тегом inline, чтобы поддерживать оператор слияния YAML (<<: *options)
 type Release struct {
-	Name      string   `yaml:"name"`
-	Chart     Chart    `yaml:"chart"`
-	Namespace string   `yaml:"namespace,omitempty"`
-	Tags      []string `yaml:"tags,omitempty"`
-	Values    []string `yaml:"values,omitempty"`
+	Name      string        `yaml:"name"`
+	Chart     Chart         `yaml:"chart"`
+	Namespace string        `yaml:"namespace,omitempty"`
+	Tags      []string      `yaml:"tags,omitempty"`
+	Values    []interface{} `yaml:"values,omitempty"`
 
-	Options `yaml:",inline"`
+	// Inline captures any additional merged keys (for example from <<: *options)
+	Inline map[string]interface{} `yaml:",inline"`
 }
 
 // Chart описывает информацию о чарте для релиза.
 type Chart struct {
 	Name    string `yaml:"name"`
 	Version string `yaml:"version,omitempty"`
+	// capture additional arbitrary chart keys (e.g. insecureskiptlsverify)
+	Other map[string]interface{} `yaml:",inline"`
 }

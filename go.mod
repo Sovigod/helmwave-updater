@@ -1,4 +1,4 @@
-module gitlab.com/sovigod/helmwave-updater
+module github.com/sovigod/helmwave-updater
 
 go 1.25.1
 

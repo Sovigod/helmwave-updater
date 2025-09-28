@@ -66,3 +66,21 @@ If you encounter permission errors (HTTP 403) when the workflow tries to create 
 Author: Sovigod
 
 License: MIT (unless otherwise specified in the repository)
+
+## Quick install (one-liners)
+
+Install the latest release binary directly to /usr/local/bin using curl.
+
+macOS (Apple Silicon / M-series, darwin/arm64):
+
+```bash
+sudo curl -sSL "https://github.com/Sovigod/helmwave-updater/releases/latest/download/helmwave-updater-darwin-arm64" -o /usr/local/bin/helmwave-updater && sudo chmod +x /usr/local/bin/helmwave-updater
+```
+
+Linux (x86_64 / linux/amd64):
+
+```bash
+sudo curl -sSL "https://github.com/Sovigod/helmwave-updater/releases/latest/download/helmwave-updater-linux-amd64" -o /usr/local/bin/helmwave-updater && sudo chmod +x /usr/local/bin/helmwave-updater
+```
+
+Note: these commands download the binary for the platform indicated and install it to `/usr/local/bin`. Adjust the URL or destination path if you need a different platform or install location.

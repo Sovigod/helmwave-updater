@@ -13,24 +13,21 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
+var filename string
+var inplace bool
+var verbose bool
+
+// tag that disables updating for a release (case-insensitive)
+const NoupdateTag = "noupdate"
+
 func main() {
 	// allow filename via flag or positional argument
-	var filename string
-	var inplace bool
-	var verbose bool
 	flag.StringVar(&filename, "file", "helmwave.yml.tpl", "path to helmwave yaml file")
 	flag.BoolVar(&inplace, "inplace", false, "modify the original file instead of creating a .updated copy")
 	flag.BoolVar(&verbose, "verbose", false, "enable verbose logging")
 	flag.Parse()
 
 	settings := cli.New()
-
-	// verbose logger helper to avoid scattering `if verbose { ... }` blocks
-	vlog := func(format string, args ...interface{}) {
-		if verbose {
-			log.Printf(format, args...)
-		}
-	}
 
 	vlog("starting: file=%s inplace=%v verbose=%v", filename, inplace, verbose)
 	vlog("helm settings: repo config=%s repo cache=%s namespace=%s", settings.RepositoryConfig, settings.RepositoryCache, settings.Namespace())
@@ -71,6 +68,12 @@ func main() {
 
 	for id, release := range helmwave.Releases {
 		vlog("processing release[%d]: name=%q chart=%q version=%q", id, release.Name, release.Chart.Name, release.Chart.Version)
+		// Skip if release has 'noupdate' tag
+		if hasTag(release.Tags, NoupdateTag) {
+			vlog("skipping release %s because it has tag '%s'", release.Name, NoupdateTag)
+			continue
+		}
+
 		// Validate chart name
 		if release.Chart.Name == "" {
 			log.Printf("skipping release %q: empty chart.name", release.Name)
@@ -120,6 +123,10 @@ func main() {
 	versionMap := make(map[string]string, len(helmwave.Releases))
 	for _, r := range helmwave.Releases {
 		if r.Name == "" {
+			continue
+		}
+		if hasTag(r.Tags, NoupdateTag) {
+			vlog("not including release %s in file edits because of '%s' tag", r.Name, NoupdateTag)
 			continue
 		}
 		versionMap[r.Name] = r.Chart.Version

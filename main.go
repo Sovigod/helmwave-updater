@@ -75,7 +75,7 @@ func readHelmwave(filename string) ([]byte, Helmwave, error) {
 
 // processReleases compares releases with repo indexes and updates in-memory versions.
 func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
-	var helmwaveTags string
+	var helmwaveTags []string
 	for id, release := range hw.Releases {
 		vlog("processing release[%d]: name=%q chart=%q version=%q", id, release.Name, release.Chart.Name, release.Chart.Version)
 
@@ -123,12 +123,27 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 			checkAppVersion(release, entries)
 			vlog("updating in-memory release %s: %s -> %s", release.Name, release.Chart.Version, lastVersion)
 			hw.Releases[id].Chart.Version = lastVersion
-			helmwaveTags += fmt.Sprintf("%s,", release.Tags[len(release.Tags)-1])
+			// collect last tag for this release (trim spaces)
+			if len(release.Tags) > 0 {
+				helmwaveTags = append(helmwaveTags, strings.TrimSpace(release.Tags[len(release.Tags)-1]))
+			}
 		} else {
 			vlog("release %s is up-to-date (%s)", release.Name, release.Chart.Version)
 		}
 	}
-	fmt.Printf("\nexport HELMWAVE_TAGS='%s'\n", strings.TrimRight(helmwaveTags, ","))
+	// remove duplicates while preserving order
+	unique := make([]string, 0, len(helmwaveTags))
+	seen := make(map[string]bool, len(helmwaveTags))
+	for _, t := range helmwaveTags {
+		if t == "" {
+			continue
+		}
+		if !seen[t] {
+			seen[t] = true
+			unique = append(unique, t)
+		}
+	}
+	fmt.Printf("\nexport HELMWAVE_TAGS='%s'\n", strings.Join(unique, ","))
 }
 
 func checkAppVersion(release Release, versions []*repo.ChartVersion) {

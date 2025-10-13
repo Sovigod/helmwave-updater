@@ -107,14 +107,27 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 		}
 
 		if release.Chart.Version != lastVersion {
-			fmt.Printf("Release: %s, Chart: %s, Version: %s\n", release.Name, release.Chart.Name, release.Chart.Version)
-			fmt.Printf("   Update available: %s -> %s \n\n", release.Chart.Version, lastVersion)
+			fmt.Printf("\nRelease: %s, Chart: %s, Version: %s\n", release.Name, release.Chart.Name, release.Chart.Version)
+			fmt.Printf("   Update available: %s -> %s \n", release.Chart.Version, lastVersion)
+			checkAppVersion(release, entries)
 			vlog("updating in-memory release %s: %s -> %s", release.Name, release.Chart.Version, lastVersion)
 			hw.Releases[id].Chart.Version = lastVersion
 		} else {
 			vlog("release %s is up-to-date (%s)", release.Name, release.Chart.Version)
 		}
 	}
+}
+
+func checkAppVersion(release Release, versions []*repo.ChartVersion) {
+	vlog("checking appVersion for release %s", release.Name)
+	for _, v := range versions {
+		if strings.TrimPrefix(v.Version, "v") == release.Chart.Version {
+			vlog("release %s is using appVersion %s", release.Name, v.AppVersion)
+			fmt.Printf("   AppVersion: %s -> %s\n", v.AppVersion, versions[0].AppVersion)
+			return
+		}
+	}
+	vlog("no matching appVersion found for release %s", release.Name)
 }
 
 // buildVersionMap prepares mapping release name -> version for file editing, skipping noupdate releases.

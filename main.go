@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/repo"
+
+	semver "github.com/Masterminds/semver/v3"
 )
 
 var filename string
@@ -19,6 +21,14 @@ var verbose bool
 
 // tag that disables updating for a release (case-insensitive)
 const NoupdateTag = "noupdate"
+
+// ANSI color codes for terminal output
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorGreen  = "\033[32m"
+)
 
 // vlog and hasTag are provided by helpers.go
 
@@ -120,14 +130,79 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 
 func checkAppVersion(release Release, versions []*repo.ChartVersion) {
 	vlog("checking appVersion for release %s", release.Name)
+
+	var currentAppVer string
+	var latestAppVer string
+	// find the entry matching the current chart version
 	for _, v := range versions {
 		if strings.TrimPrefix(v.Version, "v") == release.Chart.Version {
-			vlog("release %s is using appVersion %s", release.Name, v.AppVersion)
-			fmt.Printf("   AppVersion: %s -> %s\n", v.AppVersion, versions[0].AppVersion)
-			return
+			currentAppVer = v.AppVersion
+			break
 		}
 	}
-	vlog("no matching appVersion found for release %s", release.Name)
+	if len(versions) > 0 {
+		latestAppVer = versions[0].AppVersion
+	}
+
+	if currentAppVer == "" {
+		vlog("no matching appVersion found for release %s", release.Name)
+		if latestAppVer != "" {
+			// still print latest known appVersion
+			fmt.Printf("   AppVersion: (unknown) -> %s\n", latestAppVer)
+		}
+		return
+	}
+
+	// print simple mapping
+	fmt.Printf("   AppVersion: %s -> %s\n", currentAppVer, latestAppVer)
+
+	// try to parse semantic versions for delta calculation
+	cur, err1 := semver.NewVersion(normalizeSemVer(currentAppVer))
+	lat, err2 := semver.NewVersion(normalizeSemVer(latestAppVer))
+
+	if err1 != nil || err2 != nil {
+		// could not parse semver — nothing more to do
+		vlog("could not parse appVersion(s) for release %s: curErr=%v latErr=%v", release.Name, err1, err2)
+		return
+	}
+
+	// compare major/minor/patch (compare directly without intermediate variables)
+	var importanceColor string
+	var importanceLabel string
+
+	switch {
+	case lat.Major() > cur.Major():
+		importanceColor = colorRed
+		importanceLabel = "major"
+	case lat.Minor() > cur.Minor():
+		importanceColor = colorYellow
+		importanceLabel = "minor"
+	case lat.Patch() > cur.Patch():
+		importanceColor = colorGreen
+		importanceLabel = "patch"
+	default:
+		importanceColor = colorGreen
+		importanceLabel = "none"
+	}
+
+	// show delta with color
+	fmt.Printf("   Update importance: %s%s%s (%s -> %s)\n", importanceColor, strings.ToUpper(importanceLabel), colorReset, cur.String(), lat.String())
+}
+
+// normalizeSemVer attempts to coerce appVersion strings into a semver-compatible form
+func normalizeSemVer(v string) string {
+	// trim spaces and possible leading 'v'
+	vv := strings.TrimSpace(v)
+	vv = strings.TrimPrefix(vv, "v")
+	// if version looks like '1' or '1.2', pad to three segments
+	parts := strings.Split(vv, ".")
+	if len(parts) == 1 {
+		return vv + ".0.0"
+	}
+	if len(parts) == 2 {
+		return vv + ".0"
+	}
+	return vv
 }
 
 // buildVersionMap prepares mapping release name -> version for file editing, skipping noupdate releases.

@@ -239,8 +239,25 @@ func buildVersionMap(hw *Helmwave) map[string]string {
 	return versionMap
 }
 
+// buildChartVersionMap prepares mapping chart full name (repo/chart) -> version
+// This is used to update top-level anchors like `.options: &options` that contain a `chart:` block.
+func buildChartVersionMap(hw *Helmwave) map[string]string {
+	chartMap := make(map[string]string, len(hw.Releases))
+	for _, r := range hw.Releases {
+		if r.Chart.Name == "" {
+			continue
+		}
+		if hasTag(r.Tags, NoupdateTag) {
+			// skip releases marked as noupdate
+			continue
+		}
+		chartMap[r.Chart.Name] = r.Chart.Version
+	}
+	return chartMap
+}
+
 // updateFileText returns edited file content (string) with versions replaced according to versionMap.
-func updateFileText(original []byte, versionMap map[string]string) string {
+func updateFileText(original []byte, versionMap map[string]string, chartVersionMap map[string]string) string {
 	text := string(original)
 	lines := strings.Split(text, "\n")
 
@@ -326,6 +343,101 @@ func updateFileText(original []byte, versionMap map[string]string) string {
 		}
 	}
 
+	// Second pass: update top-level anchors (for example ".options: &options") that contain a chart: block
+	// We look for top-level keys that start with '.' (like .options) and inside their chart block
+	// try to match chart.name and update chart.version according to chartVersionMap.
+	for chartFullName, newVer := range chartVersionMap {
+		inAnchor := false
+		inChart := false
+		var anchorIndent int
+		var foundChartName string
+
+		for i := 0; i < len(lines); i++ {
+			line := lines[i]
+			trimmed := strings.TrimSpace(line)
+			indent := len(line) - len(strings.TrimLeft(line, " "))
+
+			// detect top-level anchor like ".options: &options" or ".options:"
+			if !inAnchor && strings.HasPrefix(trimmed, ".") && strings.Contains(trimmed, ":") {
+				inAnchor = true
+				anchorIndent = indent
+				inChart = false
+				foundChartName = ""
+				continue
+			}
+
+			if inAnchor {
+				// if we hit another top-level key (same or smaller indent) that is not part of chart, exit anchor
+				if indent <= anchorIndent && !strings.HasPrefix(trimmed, "chart:") && !strings.HasPrefix(trimmed, "#") {
+					inAnchor = false
+					inChart = false
+					foundChartName = ""
+					continue
+				}
+
+				if strings.HasPrefix(trimmed, "chart:") {
+					if strings.TrimSpace(trimmed) == "chart:" {
+						inChart = true
+						// chartIndent equals current indent
+						// continue to next lines to find name/version
+						continue
+					}
+				}
+
+				if inChart {
+					// if we left chart block
+					if indent <= anchorIndent && !strings.HasPrefix(trimmed, "name:") && !strings.HasPrefix(trimmed, "version:") {
+						inChart = false
+						continue
+					}
+
+					if strings.HasPrefix(trimmed, "name:") {
+						nameVal := strings.TrimSpace(strings.TrimPrefix(trimmed, "name:"))
+						nameVal = strings.Trim(nameVal, "'\"")
+						// store found chart name to later compare when we see version
+						foundChartName = nameVal
+						continue
+					}
+
+					if strings.HasPrefix(trimmed, "version:") {
+						if foundChartName == chartFullName {
+							after := strings.TrimSpace(strings.TrimPrefix(trimmed, "version:"))
+							comment := ""
+							if idx := strings.Index(after, "#"); idx >= 0 {
+								comment = " " + strings.TrimSpace(after[idx:])
+							}
+							origVal := strings.TrimSpace(after)
+							origVal = strings.TrimRight(origVal, "# ")
+							origVal = strings.Trim(origVal, "'\"")
+
+							if origVal == newVer {
+								// already up-to-date
+								inChart = false
+								inAnchor = false
+								foundChartName = ""
+								continue
+							}
+							useQuotes := strings.Contains(after, "\"") || strings.Contains(after, "'")
+							var valStr string
+							if useQuotes {
+								valStr = fmt.Sprintf("\"%s\"", newVer)
+							} else {
+								valStr = newVer
+							}
+							newLine := strings.Repeat(" ", indent) + "version: " + valStr + comment
+							vlog("replacing anchor line %d for chart %s: %q -> %q", i+1, chartFullName, lines[i], newLine)
+							lines[i] = newLine
+							inChart = false
+							inAnchor = false
+							foundChartName = ""
+							continue
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return strings.Join(lines, "\n")
 }
 
@@ -364,8 +476,9 @@ func main() {
 	processReleases(&hw, indexes)
 
 	versionMap := buildVersionMap(&hw)
+	chartVersionMap := buildChartVersionMap(&hw)
 
-	out := updateFileText(data, versionMap)
+	out := updateFileText(data, versionMap, chartVersionMap)
 
 	outFile := filename + ".updated"
 	if inplace {

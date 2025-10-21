@@ -31,6 +31,23 @@ build-ldflags: mkdirs
 	$(GO) build -ldflags="-s -w" -o $(BUILD_DIR)/$(BINARY) $(PKG)
 	@ls -lh $(BUILD_DIR)/$(BINARY)
 
+.PHONY: build-embed build-embed-min
+build-embed: mkdirs
+	@echo "Fetching latest release tag from GitHub and embedding as version"
+	@TAG=$$(curl -sS "https://api.github.com/repos/Sovigod/helmwave-updater/releases/latest" | grep -m1 '"tag_name"' | sed -E 's/.*: "([^"]+)".*/\1/'); \
+	if [ -z "$$TAG" ]; then echo "failed to get tag"; exit 1; fi; \
+	echo "Using tag: $$TAG"; \
+	$(GO) build -ldflags="-X main.version=$$TAG -s -w" -o $(BUILD_DIR)/$(BINARY) $(PKG); \
+	ls -lh $(BUILD_DIR)/$(BINARY)
+
+build-embed-min: mkdirs
+	@echo "Fetching latest release tag from GitHub and embedding as version (minimal build)"
+	@TAG=$$(curl -sS "https://api.github.com/repos/Sovigod/helmwave-updater/releases/latest" | grep -m1 '"tag_name"' | sed -E 's/.*: "([^"]+)".*/\1/'); \
+	if [ -z "$$TAG" ]; then echo "failed to get tag"; exit 1; fi; \
+	echo "Using tag: $$TAG"; \
+	CGO_ENABLED=0 $(GO) build -ldflags="-X main.version=$$TAG -s -w" -trimpath -buildvcs=false -o $(BUILD_DIR)/$(BINARY) $(PKG); \
+	ls -lh $(BUILD_DIR)/$(BINARY)
+
 build-min: mkdirs
 	@echo "Building minimal binary: CGO_ENABLED=0, -s -w, -trimpath, -buildvcs=false"
 	CGO_ENABLED=0 $(GO) build -ldflags="-s -w" -trimpath -buildvcs=false -o $(BUILD_DIR)/$(BINARY) $(PKG)

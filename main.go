@@ -18,6 +18,10 @@ import (
 var filename string
 var inplace bool
 var verbose bool
+var showVersion bool
+
+// version is populated at build time via -ldflags "-X main.version=..."
+var version = "dev"
 
 // tag that disables updating for a release (case-insensitive)
 const NoupdateTag = "noupdate"
@@ -450,13 +454,18 @@ func writeOutput(outFile, out string) error {
 	log.Printf("Wrote updated file: %s", outFile)
 	return nil
 }
-
 func main() {
 	// allow filename via flag or positional argument
+	flag.BoolVar(&showVersion, "version", false, "print latest release version from GitHub and exit")
 	flag.StringVar(&filename, "file", "helmwave.yml.tpl", "path to helmwave yaml file")
 	flag.BoolVar(&inplace, "inplace", false, "modify the original file instead of creating a .updated copy")
 	flag.BoolVar(&verbose, "verbose", false, "enable verbose logging")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	settings := cli.New()
 

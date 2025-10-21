@@ -38,7 +38,7 @@ jobs:
             out=dist/helmwave-updater-${GOOS}-${GOARCH}${ext}
             echo "Building $out"
             CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH \
-              go build -ldflags="-s -w" -trimpath -buildvcs=false -o "$out" .
+              go build -ldflags="-X main.version=${{ github.ref_name }} -s -w" -trimpath -buildvcs=false -o "$out" .
           done
           ls -lh dist || true
 

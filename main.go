@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
 
 	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/registry"
 	"helm.sh/helm/v3/pkg/repo"
 
 	semver "github.com/Masterminds/semver/v3"
@@ -62,6 +64,10 @@ func loadIndexes(settings *cli.EnvSettings) (map[string]*repo.IndexFile, error) 
 // processReleases compares releases with repo indexes and updates in-memory versions.
 func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 	var helmwaveTags []string
+	var ociClient *registry.Client
+	var ociClientErr error
+	var ociClientInitialized bool
+
 	for id, release := range hw.Releases {
 		vlog("processing release[%d]: name=%q chart=%q version=%q", id, release.Name, release.Chart.Name, release.Chart.Version)
 
@@ -72,6 +78,41 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 
 		if release.Chart.Name == "" {
 			log.Printf("skipping release %q: empty chart.name", release.Name)
+			continue
+		}
+
+		if strings.HasPrefix(release.Chart.Name, registry.OCIScheme+"://") {
+			if !ociClientInitialized {
+				ociClient, ociClientErr = registry.NewClient(registry.ClientOptEnableCache(true))
+				ociClientInitialized = true
+			}
+			if ociClientErr != nil {
+				log.Printf("failed to initialize OCI registry client (release %s): %v", release.Name, ociClientErr)
+				continue
+			}
+
+			lastVersion, err := latestOCIVersion(ociClient, release.Chart.Name)
+			if err != nil {
+				log.Printf("failed to get OCI tags for %q (release %s): %v", release.Chart.Name, release.Name, err)
+				continue
+			}
+
+			if release.Chart.Version == "" {
+				log.Printf("release %s: chart version not specified, skipping comparison", release.Name)
+				continue
+			}
+
+			if release.Chart.Version != lastVersion {
+				fmt.Printf("\nRelease: %s, Chart: %s, Version: %s\n", release.Name, release.Chart.Name, release.Chart.Version)
+				fmt.Printf("   Update available: %s -> %s \n", release.Chart.Version, lastVersion)
+				vlog("updating in-memory OCI release %s: %s -> %s", release.Name, release.Chart.Version, lastVersion)
+				hw.Releases[id].Chart.Version = lastVersion
+				if len(release.Tags) > 0 {
+					helmwaveTags = append(helmwaveTags, strings.TrimSpace(release.Tags[len(release.Tags)-1]))
+				}
+			} else {
+				vlog("OCI release %s is up-to-date (%s)", release.Name, release.Chart.Version)
+			}
 			continue
 		}
 
@@ -130,6 +171,50 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 		}
 	}
 	fmt.Printf("\nexport HELMWAVE_TAGS='%s'\n", strings.Join(unique, ","))
+}
+
+func latestOCIVersion(client *registry.Client, chartRef string) (string, error) {
+	tags, err := client.Tags(chartRef)
+	if err != nil {
+		trimmedRef := strings.TrimPrefix(chartRef, registry.OCIScheme+"://")
+		if trimmedRef == chartRef {
+			return "", err
+		}
+		tags, err = client.Tags(trimmedRef)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	latest, ok := latestSemverTag(tags)
+	if !ok {
+		return "", errors.New("no semver-compatible OCI tags found")
+	}
+
+	return latest, nil
+}
+
+func latestSemverTag(tags []string) (string, bool) {
+	var selectedVersion *semver.Version
+	selectedRawTag := ""
+
+	for _, tag := range tags {
+		normalized := normalizeSemVer(tag)
+		parsed, err := semver.NewVersion(normalized)
+		if err != nil {
+			continue
+		}
+		if selectedVersion == nil || parsed.GreaterThan(selectedVersion) {
+			selectedVersion = parsed
+			selectedRawTag = tag
+		}
+	}
+
+	if selectedVersion == nil {
+		return "", false
+	}
+
+	return strings.TrimPrefix(strings.TrimSpace(selectedRawTag), "v"), true
 }
 
 func checkAppVersion(release Release, versions []*repo.ChartVersion) {

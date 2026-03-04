@@ -5,6 +5,7 @@ A small utility to find the latest Helm chart versions from repository indexes a
 ## Features
 
 - Parses `helmwave.yml.tpl` into Go structs and updates chart versions to the latest versions found in Helm repo indexes.
+- Supports OCI charts (`oci://...`) by resolving and comparing registry tags.
 - Preserves the original file formatting by performing line-oriented edits.
 - Supports the `noupdate` tag on releases to skip updating specific releases.
 - CLI: flags `-file`, `-inplace`, `-verbose`.

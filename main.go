@@ -103,8 +103,12 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 			}
 
 			if release.Chart.Version != lastVersion {
-				fmt.Printf("\nRelease: %s, Chart: %s, Version: %s\n", release.Name, release.Chart.Name, release.Chart.Version)
-				fmt.Printf("   Update available: %s -> %s \n", release.Chart.Version, lastVersion)
+				currentAppVersion, latestAppVersion, appVersionErr := ociAppVersions(ociClient, release.Chart.Name, release.Chart.Version, lastVersion)
+				if appVersionErr != nil {
+					log.Printf("failed to get OCI appVersion for %q (release %s): %v", release.Chart.Name, release.Name, appVersionErr)
+				}
+
+				printReleaseUpdate(release, release.Chart.Version, lastVersion, currentAppVersion, latestAppVersion)
 				vlog("updating in-memory OCI release %s: %s -> %s", release.Name, release.Chart.Version, lastVersion)
 				hw.Releases[id].Chart.Version = lastVersion
 				if len(release.Tags) > 0 {
@@ -145,9 +149,8 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 		}
 
 		if release.Chart.Version != lastVersion {
-			fmt.Printf("\nRelease: %s, Chart: %s, Version: %s\n", release.Name, release.Chart.Name, release.Chart.Version)
-			fmt.Printf("   Update available: %s -> %s \n", release.Chart.Version, lastVersion)
-			checkAppVersion(release, entries)
+			currentAppVersion, latestAppVersion := appVersionsFromRepoEntries(release.Chart.Version, entries)
+			printReleaseUpdate(release, release.Chart.Version, lastVersion, currentAppVersion, latestAppVersion)
 			vlog("updating in-memory release %s: %s -> %s", release.Name, release.Chart.Version, lastVersion)
 			hw.Releases[id].Chart.Version = lastVersion
 			// collect last tag for this release (trim spaces)
@@ -171,6 +174,132 @@ func processReleases(hw *Helmwave, indexes map[string]*repo.IndexFile) {
 		}
 	}
 	fmt.Printf("\nexport HELMWAVE_TAGS='%s'\n", strings.Join(unique, ","))
+}
+
+func printReleaseUpdate(release Release, currentVersion, latestVersion, currentAppVersion, latestAppVersion string) {
+	fmt.Printf("\nRelease: %s, Chart: %s, Version: %s\n", release.Name, release.Chart.Name, currentVersion)
+	fmt.Printf("   Update available: %s -> %s \n", currentVersion, latestVersion)
+	printAppVersionUpdate(currentAppVersion, latestAppVersion)
+}
+
+func printAppVersionUpdate(currentAppVersion, latestAppVersion string) {
+	currentAppVersion = strings.TrimSpace(currentAppVersion)
+	latestAppVersion = strings.TrimSpace(latestAppVersion)
+
+	if currentAppVersion == "" && latestAppVersion == "" {
+		return
+	}
+
+	if currentAppVersion == "" {
+		fmt.Printf("   AppVersion: (unknown) -> %s\n", latestAppVersion)
+		return
+	}
+
+	if latestAppVersion == "" {
+		fmt.Printf("   AppVersion: %s -> (unknown)\n", currentAppVersion)
+		return
+	}
+
+	fmt.Printf("   AppVersion: %s -> %s\n", currentAppVersion, latestAppVersion)
+	importanceColor, importanceLabel, currentNormalized, latestNormalized, ok := appUpdateImportance(currentAppVersion, latestAppVersion)
+	if !ok {
+		return
+	}
+
+	fmt.Printf("   Update importance: %s%s%s (%s -> %s)\n", importanceColor, strings.ToUpper(importanceLabel), colorReset, currentNormalized, latestNormalized)
+}
+
+func appUpdateImportance(currentAppVersion, latestAppVersion string) (string, string, string, string, bool) {
+	cur, err1 := semver.NewVersion(normalizeSemVer(currentAppVersion))
+	lat, err2 := semver.NewVersion(normalizeSemVer(latestAppVersion))
+	if err1 != nil || err2 != nil {
+		return "", "", "", "", false
+	}
+
+	switch {
+	case lat.Major() > cur.Major():
+		return colorRed, "major", cur.String(), lat.String(), true
+	case lat.Minor() > cur.Minor():
+		return colorYellow, "minor", cur.String(), lat.String(), true
+	case lat.Patch() > cur.Patch():
+		return colorGreen, "patch", cur.String(), lat.String(), true
+	default:
+		return colorGreen, "none", cur.String(), lat.String(), true
+	}
+}
+
+func appVersionsFromRepoEntries(currentChartVersion string, versions []*repo.ChartVersion) (string, string) {
+	var currentAppVersion string
+	var latestAppVersion string
+
+	for _, v := range versions {
+		if strings.TrimPrefix(v.Version, "v") == strings.TrimPrefix(currentChartVersion, "v") {
+			currentAppVersion = strings.TrimSpace(v.AppVersion)
+			break
+		}
+	}
+
+	if len(versions) > 0 {
+		latestAppVersion = strings.TrimSpace(versions[0].AppVersion)
+	}
+
+	return currentAppVersion, latestAppVersion
+}
+
+func ociAppVersions(client *registry.Client, chartRef, currentChartVersion, latestChartVersion string) (string, string, error) {
+	currentAppVersion, err := ociAppVersionByTag(client, chartRef, currentChartVersion)
+	if err != nil {
+		return "", "", fmt.Errorf("current chart version %s: %w", currentChartVersion, err)
+	}
+
+	latestAppVersion, err := ociAppVersionByTag(client, chartRef, latestChartVersion)
+	if err != nil {
+		return "", "", fmt.Errorf("latest chart version %s: %w", latestChartVersion, err)
+	}
+
+	return currentAppVersion, latestAppVersion, nil
+}
+
+func ociAppVersionByTag(client *registry.Client, chartRef, chartVersion string) (string, error) {
+	tagCandidates := []string{strings.TrimSpace(chartVersion)}
+	trimmed := strings.TrimPrefix(strings.TrimSpace(chartVersion), "v")
+	if trimmed != "" {
+		tagCandidates = append(tagCandidates, trimmed)
+		vTagged := "v" + trimmed
+		if vTagged != tagCandidates[0] {
+			tagCandidates = append(tagCandidates, vTagged)
+		}
+	}
+
+	refCandidates := []string{chartRef}
+	if trimmedRef := strings.TrimPrefix(chartRef, registry.OCIScheme+"://"); trimmedRef != chartRef {
+		refCandidates = append(refCandidates, trimmedRef)
+	}
+
+	var lastErr error
+	for _, ref := range refCandidates {
+		for _, tag := range tagCandidates {
+			if tag == "" {
+				continue
+			}
+			pullRef := fmt.Sprintf("%s:%s", ref, tag)
+			pulled, err := client.Pull(pullRef, registry.PullOptWithChart(true))
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			if pulled == nil || pulled.Chart == nil || pulled.Chart.Meta == nil {
+				lastErr = errors.New("pulled chart metadata is empty")
+				continue
+			}
+			return strings.TrimSpace(pulled.Chart.Meta.AppVersion), nil
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = errors.New("no OCI tags to query appVersion")
+	}
+	return "", lastErr
 }
 
 func latestOCIVersion(client *registry.Client, chartRef string) (string, error) {
@@ -215,67 +344,6 @@ func latestSemverTag(tags []string) (string, bool) {
 	}
 
 	return strings.TrimPrefix(strings.TrimSpace(selectedRawTag), "v"), true
-}
-
-func checkAppVersion(release Release, versions []*repo.ChartVersion) {
-	vlog("checking appVersion for release %s", release.Name)
-
-	var currentAppVer string
-	var latestAppVer string
-	// find the entry matching the current chart version
-	for _, v := range versions {
-		if strings.TrimPrefix(v.Version, "v") == release.Chart.Version {
-			currentAppVer = v.AppVersion
-			break
-		}
-	}
-	if len(versions) > 0 {
-		latestAppVer = versions[0].AppVersion
-	}
-
-	if currentAppVer == "" {
-		vlog("no matching appVersion found for release %s", release.Name)
-		if latestAppVer != "" {
-			// still print latest known appVersion
-			fmt.Printf("   AppVersion: (unknown) -> %s\n", latestAppVer)
-		}
-		return
-	}
-
-	// print simple mapping
-	fmt.Printf("   AppVersion: %s -> %s\n", currentAppVer, latestAppVer)
-
-	// try to parse semantic versions for delta calculation
-	cur, err1 := semver.NewVersion(normalizeSemVer(currentAppVer))
-	lat, err2 := semver.NewVersion(normalizeSemVer(latestAppVer))
-
-	if err1 != nil || err2 != nil {
-		// could not parse semver — nothing more to do
-		vlog("could not parse appVersion(s) for release %s: curErr=%v latErr=%v", release.Name, err1, err2)
-		return
-	}
-
-	// compare major/minor/patch (compare directly without intermediate variables)
-	var importanceColor string
-	var importanceLabel string
-
-	switch {
-	case lat.Major() > cur.Major():
-		importanceColor = colorRed
-		importanceLabel = "major"
-	case lat.Minor() > cur.Minor():
-		importanceColor = colorYellow
-		importanceLabel = "minor"
-	case lat.Patch() > cur.Patch():
-		importanceColor = colorGreen
-		importanceLabel = "patch"
-	default:
-		importanceColor = colorGreen
-		importanceLabel = "none"
-	}
-
-	// show delta with color
-	fmt.Printf("   Update importance: %s%s%s (%s -> %s)\n", importanceColor, strings.ToUpper(importanceLabel), colorReset, cur.String(), lat.String())
 }
 
 // normalizeSemVer attempts to coerce appVersion strings into a semver-compatible form

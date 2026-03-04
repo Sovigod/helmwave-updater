@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v4/pkg/cli"
 )
 
 // readHelmwave reads and unmarshals helmwave YAML file into structures.

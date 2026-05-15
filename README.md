@@ -68,6 +68,26 @@ To overwrite the original file in-place:
 bin/helmwave-updater -file helmwave.yml.tpl -inplace
 ```
 
+To skip `helm repo update` (useful in offline environments or CI where indexes are already fresh):
+
+```bash
+bin/helmwave-updater -no-repo-update -file helmwave.yml.tpl
+```
+
+### Self-update
+
+Update the binary to the latest GitHub release:
+
+```bash
+helmwave-updater self-update
+```
+
+If the binary is installed in a system directory (e.g. `/usr/local/bin`), run with `sudo`:
+
+```bash
+sudo helmwave-updater self-update
+```
+
 ## Contact
 
 Author: Sovigod

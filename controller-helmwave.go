@@ -274,6 +274,11 @@ func writeOutput(outFile, out string) error {
 	return nil
 }
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "self-update" {
+		runSelfUpdate(version)
+		return
+	}
+
 	// allow filename via flag or positional argument
 	flag.BoolVar(&showVersion, "version", false, "print latest release version from GitHub and exit")
 	flag.StringVar(&filename, "file", "helmwave.yml.tpl", "path to helmwave yaml file")

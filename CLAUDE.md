@@ -15,6 +15,7 @@ make clean        # remove bin/
 ```
 
 Run a single test by name:
+
 ```bash
 go test -run TestLatestSemverTag ./...
 ```
@@ -25,8 +26,8 @@ The version string is injected at build time via `-ldflags "-X main.version=<tag
 
 The tool is a single `main` package with four source files:
 
-- **[main.go](main.go)** — CLI flags (`-file`, `-inplace`, `-verbose`, `-version`), orchestration: reads file → loads indexes → processes releases → writes output.
-- **[controller-helmwave.go](controller-helmwave.go)** — all business logic: loading Helm repo indexes, comparing semver versions, OCI tag resolution, building version maps, and performing line-oriented file edits.
+- **[main.go](main.go)** — global flag variables and all business logic: `updateRepos`, `loadIndexes`, `processReleases`, OCI version resolution, semver comparison, version map builders.
+- **[controller-helmwave.go](controller-helmwave.go)** — `main()` entry point (flag registration, orchestration: repo update → read file → load indexes → process releases → write output), YAML file I/O (`readHelmwave`, `removeTopLevelSection`, `updateFileText`, `writeOutput`).
 - **[model-helmwave-yaml.go](model-helmwave-yaml.go)** — Go structs (`Helmwave`, `Release`, `Chart`) for unmarshalling `helmwave.yml.tpl`.
 - **[helpers.go](helpers.go)** — `vlog` (verbose logger) and `hasTag` (case-insensitive tag check).
 

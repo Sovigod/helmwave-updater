@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/registry"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
 
@@ -18,6 +19,7 @@ var filename string
 var inplace bool
 var verbose bool
 var showVersion bool
+var noRepoUpdate bool
 
 // version is populated at build time via -ldflags "-X main.version=..."
 var version = "dev"
@@ -34,6 +36,30 @@ const (
 )
 
 // vlog and hasTag are provided by helpers.go
+
+// updateRepos runs the equivalent of `helm repo update` for all configured repositories.
+func updateRepos(settings *cli.EnvSettings) {
+	f, err := repo.LoadFile(settings.RepositoryConfig)
+	if err != nil {
+		log.Printf("⚠️ failed to load repo file for update: %v", err)
+		return
+	}
+	providers := getter.All(settings)
+	for _, entry := range f.Repositories {
+		vlog("updating repo %s (%s)", entry.Name, entry.URL)
+		r, err := repo.NewChartRepository(entry, providers)
+		if err != nil {
+			log.Printf("⚠️ failed to init repo %s: %v", entry.Name, err)
+			continue
+		}
+		r.CachePath = settings.RepositoryCache
+		if _, err := r.DownloadIndexFile(); err != nil {
+			log.Printf("⚠️ failed to update repo %s: %v", entry.Name, err)
+			continue
+		}
+		log.Printf("updated repo %s", entry.Name)
+	}
+}
 
 // loadIndexes loads helm repo index files from settings repository cache.
 func loadIndexes(settings *cli.EnvSettings) (map[string]*repo.IndexFile, error) {

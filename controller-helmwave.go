@@ -279,6 +279,7 @@ func main() {
 	flag.StringVar(&filename, "file", "helmwave.yml.tpl", "path to helmwave yaml file")
 	flag.BoolVar(&inplace, "inplace", false, "modify the original file instead of creating a .updated copy")
 	flag.BoolVar(&verbose, "verbose", false, "enable verbose logging")
+	flag.BoolVar(&noRepoUpdate, "no-repo-update", false, "skip helm repo update before checking versions")
 	flag.Parse()
 
 	if showVersion {
@@ -288,8 +289,13 @@ func main() {
 
 	settings := cli.New()
 
-	vlog("starting: file=%s inplace=%v verbose=%v", filename, inplace, verbose)
+	vlog("starting: file=%s inplace=%v verbose=%v no-repo-update=%v", filename, inplace, verbose, noRepoUpdate)
 	vlog("helm settings: repo config=%s repo cache=%s namespace=%s", settings.RepositoryConfig, settings.RepositoryCache, settings.Namespace())
+
+	if !noRepoUpdate {
+		log.Println("running helm repo update...")
+		updateRepos(settings)
+	}
 
 	indexes, err := loadIndexes(settings)
 	if err != nil {

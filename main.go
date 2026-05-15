@@ -18,7 +18,6 @@ import (
 var filename string
 var inplace bool
 var verbose bool
-var showVersion bool
 var noRepoUpdate bool
 
 // version is populated at build time via -ldflags "-X main.version=..."

@@ -274,23 +274,22 @@ func writeOutput(outFile, out string) error {
 	return nil
 }
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "self-update" {
-		runSelfUpdate(version)
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version":
+			fmt.Println(version)
+			return
+		case "self-update":
+			runSelfUpdate(version)
+			return
+		}
 	}
 
-	// allow filename via flag or positional argument
-	flag.BoolVar(&showVersion, "version", false, "print latest release version from GitHub and exit")
 	flag.StringVar(&filename, "file", "helmwave.yml.tpl", "path to helmwave yaml file")
 	flag.BoolVar(&inplace, "inplace", false, "modify the original file instead of creating a .updated copy")
 	flag.BoolVar(&verbose, "verbose", false, "enable verbose logging")
 	flag.BoolVar(&noRepoUpdate, "no-repo-update", false, "skip helm repo update before checking versions")
 	flag.Parse()
-
-	if showVersion {
-		fmt.Println(version)
-		return
-	}
 
 	settings := cli.New()
 
